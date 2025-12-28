@@ -1,0 +1,7 @@
+{
+  "name": "VoiceNotes Dark",
+  "description": "A dark-mode, voice-first notes application featuring recording, transcription, and local storage.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
