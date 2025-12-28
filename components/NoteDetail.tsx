@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Note } from '../types';
 import { PlaybackBar } from './PlaybackBar';
 import { storageService } from '../services/storageService';
-import { transcribeAudio, generateTitle } from '../services/geminiService';
+import { transcribeAudio, generateTitle } from '../services/aiService';
 
 interface NoteDetailProps {
   note: Note;
@@ -91,17 +91,16 @@ export const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack, onUpdate, 
       {/* Header */}
       <div className="flex items-center justify-between p-4 sm:p-6 border-b border-surface">
         <button onClick={onBack} className="text-secondary hover:text-primary transition-colors flex items-center gap-1 sm:gap-2 text-sm sm:text-base">
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
           Back
         </button>
         <span className="text-[10px] sm:text-xs text-secondary font-mono tracking-widest uppercase">Note Details</span>
-        <button 
+        <button
           onClick={handleDeleteClick}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 ${
-            isConfirmingDelete 
-              ? 'bg-accent text-background font-bold text-[10px] sm:text-xs animate-pulse' 
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 ${isConfirmingDelete
+              ? 'bg-accent text-background font-bold text-[10px] sm:text-xs animate-pulse'
               : 'text-secondary hover:text-accent p-2'
-          }`}
+            }`}
           aria-label="Delete note"
         >
           {isConfirmingDelete ? (
@@ -128,7 +127,7 @@ export const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack, onUpdate, 
               <span>{formatDuration(note.duration)}</span>
               <span className="opacity-30 hidden sm:inline">•</span>
               <span className="flex items-center gap-1">
-                <svg className="w-3 h-3 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+                <svg className="w-3 h-3 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /></svg>
                 Voice Note
               </span>
             </div>
@@ -145,15 +144,15 @@ export const NoteDetail: React.FC<NoteDetailProps> = ({ note, onBack, onUpdate, 
                 Transcript
               </h4>
             ) : (
-              <button 
+              <button
                 onClick={handleTranscribe}
                 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em] mb-4 sm:mb-6 transition-all flex items-center gap-2 bg-accent/10 text-accent px-3 py-2 sm:px-4 sm:py-2.5 rounded-full hover:bg-accent/20 active:scale-95"
               >
                 Transcribe
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14"/></svg>
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14" /></svg>
               </button>
             )}
-            
+
             {showTranscribing ? (
               <div className="flex flex-col gap-2">
                 <div className="h-3 bg-surface rounded w-3/4 animate-pulse" />
