@@ -1,1 +1,119 @@
 @import "tailwindcss";
+
+@theme {
+  /* Colors */
+  --color-background: #000000;
+  --color-surface: #111111;
+  --color-primary: #ff8800;
+  --color-secondary: #ffaa00;
+  --color-border: #1e1e1e;
+  --color-foreground: #ffffff;
+  --color-muted: #999999;
+  --color-dimmed: #555555;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  /* Radius */
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+
+  /* Cross-platform container */
+  .app-container {
+    @apply mx-auto w-full min-h-screen px-4 py-8;
+    max-width: 500px;
+    /* Maintains focused mobile-feel on PC */
+  }
+
+  .card-premium {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Specific mistake card from reference */
+  .card-mistake {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-primary);
+    /* Primary color border instead of default */
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: #000;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    border-radius: 9999px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+
+  .btn-primary:active {
+    transform: scale(0.94);
+  }
+
+  .btn-outline {
+    background-color: transparent;
+    color: var(--color-foreground);
+    border: 1px solid var(--color-border);
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    border-radius: 9999px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+
+  .btn-outline:active {
+    transform: scale(0.94);
+  }
+
+  .text-jumbo {
+    font-size: 3.5rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.05em;
+  }
+
+  .text-orange {
+    color: var(--color-primary);
+  }
+
+  .filler-highlight {
+    color: var(--color-foreground);
+    text-decoration: underline wavy var(--color-primary);
+    text-underline-offset: 4px;
+  }
+}
