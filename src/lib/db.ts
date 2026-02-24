@@ -9,7 +9,9 @@ import {
     where,
     getDocs,
     Timestamp,
-    increment
+    increment,
+    runTransaction,
+    orderBy
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -69,39 +71,50 @@ export async function saveUserPreferences(uid: string, preferences: string[]) {
 }
 
 /**
- * Saves a new recording and increments the user's recording count
+ * Saves a new recording and increments the user's recording count atomically
  */
 export async function saveRecording(recording: Omit<Recording, "createdAt">) {
-    // 1. Double check the limit (though this should be handled on server in prod)
-    const userRef = doc(db, "users", recording.userId);
-    const userSnap = await getDoc(userRef);
-    const userData = userSnap.data() as UserProfile;
+    return await runTransaction(db, async (transaction) => {
+        const userRef = doc(db, "users", recording.userId);
+        const userSnap = await transaction.get(userRef);
 
-    if (userData.recordingCount >= 5) {
-        throw new Error("Maximum recording limit reached (5/5)");
-    }
+        if (!userSnap.exists()) {
+            throw new Error("User profile not found");
+        }
 
-    // 2. Save the recording
-    const recordingData = {
-        ...recording,
-        createdAt: Timestamp.now(),
-    };
-    const recordingRef = await addDoc(collection(db, "recordings"), recordingData);
+        const userData = userSnap.data() as UserProfile;
 
-    // 3. Increment the user's count
-    await updateDoc(userRef, {
-        recordingCount: increment(1),
-        lastRecordingAt: Timestamp.now()
+        if (userData.recordingCount >= 5) {
+            throw new Error("Maximum recording limit reached (5/5)");
+        }
+
+        // Generate a new ID for the recording document
+        const recordingRef = doc(collection(db, "recordings"));
+        const recordingData = {
+            ...recording,
+            createdAt: Timestamp.now(),
+        };
+
+        // Perform atomic writes
+        transaction.set(recordingRef, recordingData);
+        transaction.update(userRef, {
+            recordingCount: increment(1),
+            lastRecordingAt: Timestamp.now()
+        });
+
+        return recordingRef.id;
     });
-
-    return recordingRef.id;
 }
 
 /**
  * Fetches all recordings for a user
  */
 export async function getUserRecordings(uid: string): Promise<Recording[]> {
-    const q = query(collection(db, "recordings"), where("userId", "==", uid));
+    const q = query(
+        collection(db, "recordings"),
+        where("userId", "==", uid),
+        orderBy("createdAt", "desc")
+    );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => doc.data() as Recording);
 }

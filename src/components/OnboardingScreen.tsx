@@ -28,11 +28,14 @@ interface OnboardingProps {
     onComplete: (preferences: string[]) => void;
 }
 
+const EXIT_DURATION = 800; // ms
+
 export function OnboardingScreen({ onComplete }: OnboardingProps) {
     const [selected, setSelected] = useState<string[]>([]);
     const [isExiting, setIsExiting] = useState(false);
 
     const toggleCategory = (id: string) => {
+        if (isExiting) return;
         if (selected.includes(id)) {
             setSelected(selected.filter((item) => item !== id));
         } else {
@@ -41,12 +44,12 @@ export function OnboardingScreen({ onComplete }: OnboardingProps) {
     };
 
     const handleConfirm = () => {
-        if (selected.length === 0) return;
+        if (selected.length === 0 || isExiting) return;
         setIsExiting(true);
-        // Delay to allow exit animation to play
+        // Staggered exit animation relies on EXIT_DURATION
         setTimeout(() => {
             onComplete(selected);
-        }, 800);
+        }, EXIT_DURATION);
     };
 
     return (
@@ -54,18 +57,18 @@ export function OnboardingScreen({ onComplete }: OnboardingProps) {
             <div className="mb-12 text-center">
                 <motion.h1
                     initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    animate={isExiting ? { opacity: 0, y: -10 } : { opacity: 1, y: 0 }}
                     className="text-3xl font-extrabold mb-3 tracking-tight"
                 >
-                    What sparks your focus?
+                    {isExiting ? "Locking focus..." : "What sparks your focus?"}
                 </motion.h1>
                 <motion.p
                     initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    animate={isExiting ? { opacity: 0, y: -10 } : { opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                     className="text-dimmed"
                 >
-                    Choose topics you want to master. These are locked permanently for V1.
+                    {isExiting ? "Preparing your mental gym..." : "Choose topics you want to master."}
                 </motion.p>
             </div>
 
