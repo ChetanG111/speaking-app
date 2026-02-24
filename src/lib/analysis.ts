@@ -26,15 +26,22 @@ export async function analyzeRecording(audioBlob: Blob, topicTitle: string): Pro
 
     const base64Audio = await base64Promise;
 
+    if (!base64Audio || base64Audio.length < 100) {
+        throw new Error("Recording too short or audio capture failed. Please try again.");
+    }
+
     const prompt = `
-    You are a professional speaking coach. Analyze this 1-2 minute speech on the topic: "${topicTitle}".
+    You are a professional speaking coach. I have provided an audio recording of a speech on the topic: "${topicTitle}".
+    
+    CRITICAL: You MUST analyze the PROVIDED AUDIO. Do not provide generic feedback.
+    If the audio is silent or unintelligible, state that in the transcript field but still return a valid JSON object.
     
     Tasks:
-    1. Transcribe the speech accurately.
+    1. Transcribe the speech accurately from the audio.
     2. Detect filler words (um, uh, like, so, basically, you know).
-    3. Evaluate the structure (Hook, Point 1, Point 2, Conclusion).
-    4. Calculate WPM (Words Per Minute).
-    5. Provide 3 specific, actionable feedback points.
+    3. Evaluate how well the speaker followed a structure (Hook, Main Points, Conclusion).
+    4. Calculate WPM (Words Per Minute) based on the transcript and audio duration.
+    5. Provide 3 specific, actionable feedback points based EXACTLY on what was said.
     
     Return strictly as JSON:
     {
@@ -54,12 +61,13 @@ export async function analyzeRecording(audioBlob: Blob, topicTitle: string): Pro
         const result = await aiModel.generateContent([
             {
                 inlineData: {
-                    mimeType: "audio/webm",
+                    mimeType: audioBlob.type || "audio/webm",
                     data: base64Audio
                 }
             },
             { text: prompt }
         ]);
+
 
         const text = result.response.text();
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -67,16 +75,20 @@ export async function analyzeRecording(audioBlob: Blob, topicTitle: string): Pro
             return JSON.parse(jsonMatch[0].trim());
         }
         throw new Error("Invalid analysis format");
-    } catch (error) {
+    } catch (error: any) {
         console.error("AI Analysis Error:", error);
-        // Return empty mock result if AI fails
+        // Return descriptive error result if AI fails
         return {
             transcript: "[Transcription failed]",
             wpm: 0,
             fillers: 0,
             pauseDensity: 0,
             structureScore: 0,
-            feedback: [{ text: "Could not analyze speech. Please ensure API key is valid.", type: "negative", timestamp: "0:00" }]
+            feedback: [{
+                text: error.message || "Could not analyze speech. Please ensure API key is valid.",
+                type: "negative",
+                timestamp: "0:00"
+            }]
         };
     }
 }

@@ -1,0 +1,165 @@
+﻿diff --git a/src/app/page.tsx b/src/app/page.tsx
+index fe6b5f5..b558d8b 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -19,10 +19,11 @@ export default function Home() {
+   const [profileLoading, setProfileLoading] = useState(true);
+   const [isSessionActive, setIsSessionActive] = useState(false);
+   const [analysisResult, setAnalysisResult] = useState<{ topic: string, result: AnalysisResult } | null>(null);
+   const [isAnalyzing, setIsAnalyzing] = useState(false);
+   const [view, setView] = useState<"dashboard" | "history">("dashboard");
++  const [sessionError, setSessionError] = useState<string | null>(null);
+ 
+   useEffect(() => {
+     async function fetchProfile() {
+       if (user) {
+         setProfileLoading(true);
+@@ -54,14 +55,30 @@ export default function Home() {
+ 
+   interface SessionData {
+     topic: { title: string };
+     audioBlob: Blob;
+     time: number;
++    hasVoice: boolean;
+   }
+ 
+   const handleSessionComplete = async (sessionData: SessionData) => {
+     if (!user) return;
++
++    // Enforcement: > 5s and must contain voice
++    if (sessionData.time < 5) {
++      setSessionError("Recording too short. Please speak for at least 5 seconds.");
++      setIsSessionActive(false);
++      return;
++    }
++
++    if (!sessionData.hasVoice) {
++      setSessionError("No voice detected. Please try speaking louder or check your mic.");
++      setIsSessionActive(false);
++      return;
++    }
++
++    setSessionError(null);
+     setIsAnalyzing(true);
+     setIsSessionActive(false);
+ 
+     try {
+       const result = await analyzeRecording(sessionData.audioBlob, sessionData.topic.title);
+@@ -244,16 +261,38 @@ export default function Home() {
+       <div className="flex flex-col items-center justify-center flex-1 py-12">
+         <Card className="w-full mb-10 text-center py-12 relative overflow-hidden group border-orange/20">
+           <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+             <Sparkles className="text-orange" size={24} />
+           </div>
+-          <p className="text-dimmed text-sm font-medium mb-3 uppercase tracking-widest">Ready to sharpen your thinking?</p>
+-          <h2 className="text-3xl font-bold tracking-tight mb-2 px-4 leading-tight">Generate a daily prompt and start training.</h2>
++
++          {sessionError ? (
++            <div className="px-6 animate-in fade-in slide-in-from-top-4">
++              <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
++                <Mic className="text-red-500" size={24} />
++              </div>
++              <h3 className="text-xl font-bold text-red-500 mb-2">Session Invalid</h3>
++              <p className="text-dimmed text-sm leading-relaxed">{sessionError}</p>
++              <button
++                onClick={() => setSessionError(null)}
++                className="mt-4 text-[10px] uppercase tracking-widest font-bold text-orange hover:opacity-80 transition-opacity"
++              >
++                Dismiss
++              </button>
++            </div>
++          ) : (
++            <>
++              <p className="text-dimmed text-sm font-medium mb-3 uppercase tracking-widest">Ready to sharpen your thinking?</p>
++              <h2 className="text-3xl font-bold tracking-tight mb-2 px-4 leading-tight">Generate a daily prompt and start training.</h2>
++            </>
++          )}
+         </Card>
+ 
+         <Button
+-          onClick={() => setIsSessionActive(true)}
++          onClick={() => {
++            setSessionError(null);
++            setIsSessionActive(true);
++          }}
+           className="w-full py-6 text-xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(255,136,0,0.15)] animate-shimmer bg-gradient-to-r from-orange via-orange/90 to-orange"
+         >
+           Start Training
+         </Button>
+       </div>
+diff --git a/src/components/SessionManager.tsx b/src/components/SessionManager.tsx
+index 3fdfae6..1625bac 100644
+--- a/src/components/SessionManager.tsx
++++ b/src/components/SessionManager.tsx
+@@ -40,10 +40,11 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
+     const [status, setStatus] = useState<SessionStatus>("generating_topics");
+     const [topics, setTopics] = useState<Topic[]>([]);
+     const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+     const [countdown, setCountdown] = useState(3);
+     const [recordingTime, setRecordingTime] = useState(0);
++    const [hasVoiceDetected, setHasVoiceDetected] = useState(false);
+ 
+     const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+     const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+ 
+     // Real topic generation
+@@ -78,18 +79,45 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
+     // Recording logic
+     useEffect(() => {
+         if (status === "recording") {
+             navigator.mediaDevices.getUserMedia({ audio: true })
+                 .then(stream => {
++                    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
++                    const source = audioContext.createMediaStreamSource(stream);
++                    const analyser = audioContext.createAnalyser();
++                    analyser.fftSize = 256;
++                    source.connect(analyser);
++
++                    const bufferLength = analyser.frequencyBinCount;
++                    const dataArray = new Uint8Array(bufferLength);
++
++                    const checkVolume = () => {
++                        if (status !== "recording") return;
++                        analyser.getByteFrequencyData(dataArray);
++                        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
++
++                        // Simple threshold for "actual voice"
++                        if (average > 15) {
++                            setHasVoiceDetected(true);
++                        }
++                        requestAnimationFrame(checkVolume);
++                    };
++                    checkVolume();
++
+                     const recorder = new MediaRecorder(stream);
+                     setMediaRecorder(recorder);
+                     recorder.ondataavailable = (e) => {
+                         if (e.data.size > 0) {
+                             setAudioChunks(prev => [...prev, e.data]);
+                         }
+                     };
+                     recorder.start();
++
++                    // Cleanup audio context on stop
++                    recorder.onstop = () => {
++                        audioContext.close();
++                    };
+                 })
+                 .catch(err => {
+                     console.error("Microphone access denied:", err);
+                     setStatus("selecting_topic");
+                 });
+@@ -123,11 +151,12 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
+             mediaRecorder.onstop = () => {
+                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                 onComplete({
+                     topic: selectedTopic,
+                     time: recordingTime,
+-                    audioBlob
++                    audioBlob,
++                    hasVoice: hasVoiceDetected
+                 });
+             };
+             mediaRecorder.stop();
+             // Stop all tracks to turn off recording indicator
+             mediaRecorder.stream.getTracks().forEach(track => track.stop());

@@ -13,12 +13,14 @@ import {
     Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { generateTopics } from "@/lib/gemini";
+import { generateTopics, generatePoints } from "@/lib/gemini";
 
 type SessionStatus =
     | "idle"
     | "generating_topics"
     | "selecting_topic"
+    | "generating_points"
+    | "preparing"
     | "countdown"
     | "recording"
     | "processing"
@@ -47,7 +49,9 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
     const [hasVoiceDetected, setHasVoiceDetected] = useState(false);
 
     const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-    const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+    const audioChunksRef = React.useRef<Blob[]>([]);
+    const [points, setPoints] = useState<string[]>([]);
+    const [prepTime, setPrepTime] = useState(20);
 
     // Real topic generation
     useEffect(() => {
@@ -65,6 +69,35 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
         }
         getTopics();
     }, [status, preferences]);
+
+    // Point generation
+    useEffect(() => {
+        async function getPoints() {
+            if (status === "generating_points" && selectedTopic) {
+                try {
+                    const aiPoints = await generatePoints(selectedTopic.title);
+                    setPoints(aiPoints);
+                    setStatus("preparing");
+                } catch (error) {
+                    console.error("Failed to generate points:", error);
+                    setStatus("preparing");
+                }
+            }
+        }
+        getPoints();
+    }, [status, selectedTopic]);
+
+    // Preparation timer
+    useEffect(() => {
+        if (status === "preparing") {
+            if (prepTime > 0) {
+                const timer = setTimeout(() => setPrepTime(prepTime - 1), 1000);
+                return () => clearTimeout(timer);
+            } else {
+                setStatus("countdown");
+            }
+        }
+    }, [status, prepTime]);
 
     // Countdown logic
     useEffect(() => {
@@ -107,12 +140,13 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
 
                     const recorder = new MediaRecorder(stream);
                     setMediaRecorder(recorder);
+                    audioChunksRef.current = [];
                     recorder.ondataavailable = (e) => {
                         if (e.data.size > 0) {
-                            setAudioChunks(prev => [...prev, e.data]);
+                            audioChunksRef.current.push(e.data);
                         }
                     };
-                    recorder.start();
+                    recorder.start(1000); // Collect chunks every second to be safe
 
                     // Cleanup audio context on stop
                     recorder.onstop = () => {
@@ -145,7 +179,7 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
     }, [status]);
 
     const handleStartRecording = () => {
-        setStatus("countdown");
+        setStatus("generating_points");
     };
 
     const handleStopRecording = () => {
@@ -153,7 +187,10 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
             const existingOnStop = mediaRecorder.onstop;
             mediaRecorder.onstop = (e) => {
                 existingOnStop?.call(mediaRecorder, e);
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const audioType = (mediaRecorder.mimeType || 'audio/webm').split(';')[0];
+                const audioBlob = new Blob(audioChunksRef.current, { type: audioType });
+
+                // Add a small delay to ensure any pending chunks are processed (though refs handle this better)
                 onComplete({
                     topic: selectedTopic,
                     time: recordingTime,
@@ -175,7 +212,7 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col p-6 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-background flex flex-col p-6 overflow-hidden">
             {/* Header */}
             <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-2">
@@ -218,7 +255,7 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
                         className="flex-1 flex flex-col"
                     >
                         <h2 className="text-3xl font-extrabold mb-8 tracking-tight">Select a Topic</h2>
-                        <div className="space-y-4 mb-8">
+                        <div className="flex-1 overflow-y-auto space-y-4 mb-8 pr-2 custom-scrollbar">
                             {topics.map((topic) => (
                                 <button
                                     key={topic.id}
@@ -236,6 +273,7 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
                             ))}
                         </div>
 
+
                         <Button
                             disabled={!selectedTopic}
                             onClick={handleStartRecording}
@@ -245,6 +283,72 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
                         </Button>
                     </motion.div>
                 )}
+
+                {status === "generating_points" && (
+                    <motion.div
+                        key="generating-points"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="flex-1 flex flex-col items-center justify-center text-center"
+                    >
+                        <Loader2 className="w-12 h-12 text-orange animate-spin mb-6" />
+                        <h2 className="text-2xl font-bold mb-2">Structuring thoughts...</h2>
+                        <p className="text-dimmed">Crafting a logical flow for your speech.</p>
+                    </motion.div>
+                )}
+
+                {status === "preparing" && (
+                    <motion.div
+                        key="preparing"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex-1 flex flex-col overflow-hidden"
+                    >
+                        <div className="flex justify-between items-end mb-4">
+                            <div>
+                                <h2 className="text-2xl font-extrabold tracking-tight">Prepare Your Points</h2>
+                                <p className="text-dimmed text-xs mt-0.5">Focus on these key talking points (90s).</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-orange font-bold text-lg bg-orange/10 px-3 py-1.5 rounded-xl">
+                                <Timer size={18} />
+                                <span>{prepTime}s</span>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-center space-y-2.5 overflow-hidden py-2">
+                            {points.length > 0 ? (
+                                points.map((point, index) => (
+                                    <motion.div
+                                        key={index}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: index * 0.05 }}
+                                        className="bg-surface border border-border px-4 py-3 rounded-[1.25rem] flex gap-3 items-center"
+                                    >
+                                        <div className="w-6 h-6 rounded-full bg-orange/10 text-orange flex items-center justify-center flex-shrink-0 font-bold text-xs">
+                                            {index + 1}
+                                        </div>
+                                        <p className="text-base font-medium leading-tight text-foreground/90">{point}</p>
+                                    </motion.div>
+                                ))
+                            ) : (
+                                <div className="text-center py-8">
+                                    <AlertCircle className="w-10 h-10 text-dimmed mx-auto mb-3" />
+                                    <p className="text-dimmed text-sm">Organizing your thoughts...</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <Button
+                            onClick={() => setStatus("countdown")}
+                            className="mt-4 py-4 text-lg rounded-[1.25rem] bg-orange/10 border-orange/20 text-orange hover:bg-orange/20"
+                        >
+                            Skip to Start
+                        </Button>
+                    </motion.div>
+                )}
+
 
                 {status === "countdown" && (
                     <motion.div

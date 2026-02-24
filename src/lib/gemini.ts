@@ -19,8 +19,8 @@ export async function generateTopics(preferences: string[]) {
     try {
         const result = await aiModel.generateContent(prompt);
         const text = result.response.text();
-        // Simple JSON extraction
-        const jsonMatch = text.match(/\[.*\]/s);
+        // Simple JSON extraction - fixed regex for older targets
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
             return JSON.parse(jsonMatch[0]);
         }
@@ -34,3 +34,43 @@ export async function generateTopics(preferences: string[]) {
         ];
     }
 }
+
+export async function generatePoints(topic: string) {
+    const prompt = `
+    You are an expert speaking coach. For the topic: "${topic}", 
+    generate 5-6 concise, high-impact talking points to guide a 90-second speech.
+    The points should follow a logical structure:
+    - An engaging hook
+    - 3-4 distinct main arguments or insights
+    - A memorable conclusion
+    
+    IMPORTANT: Do NOT label them as "Hook", "Point 1", etc. Just provide the content of each point.
+    Keep each point extremely concise (max 12 words) so they are easy to read at a glance.
+    
+    Return the response in strictly this JSON format:
+    ["Point 1 text", "Point 2 text", "Point 3 text", "Point 4 text", "Point 5 text", "Point 6 text"]
+  `;
+
+    try {
+        const result = await aiModel.generateContent(prompt);
+        const text = result.response.text();
+        // Ensure regex matches across newlines if the JSON is formatted with them
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+        throw new Error("Invalid AI response format");
+    } catch (error) {
+        console.error("AI Point Generation Error:", error);
+        return [
+            "Hook the audience with a relevant personal story.",
+            "Discuss the current landscape and its main challenges.",
+            "Explain the first key pillar of your argument.",
+            "Provide a secondary insight that adds necessary depth.",
+            "Address a potential counter-perspective or limitation.",
+            "Finish with a powerful call to action or closing thought."
+        ];
+    }
+}
+
+
