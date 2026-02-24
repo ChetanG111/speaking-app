@@ -21,6 +21,7 @@ export default function Home() {
   const [analysisResult, setAnalysisResult] = useState<{ topic: string, result: AnalysisResult } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [view, setView] = useState<"dashboard" | "history">("dashboard");
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchProfile() {
@@ -56,10 +57,25 @@ export default function Home() {
     topic: { title: string };
     audioBlob: Blob;
     time: number;
+    hasVoice: boolean;
   }
 
   const handleSessionComplete = async (sessionData: SessionData) => {
     if (!user) return;
+
+    // Enforcement: > 5s and must contain voice
+    if (sessionData.time < 5) {
+      setSessionError("Recording too short. Please speak for at least 5 seconds.");
+    } else if (!sessionData.hasVoice) {
+      setSessionError("No voice detected. Please try speaking louder or check your mic.");
+    }
+
+    if (sessionData.time < 5 || !sessionData.hasVoice) {
+      setIsSessionActive(false);
+      return;
+    }
+
+    setSessionError(null);
     setIsAnalyzing(true);
     setIsSessionActive(false);
 
@@ -87,6 +103,7 @@ export default function Home() {
       setProfile(updatedProfile);
     } catch (error) {
       console.error("Analysis/Save Error:", error);
+      setSessionError("Failed to process or save your session. Please check your connection and try again.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -246,12 +263,34 @@ export default function Home() {
           <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
             <Sparkles className="text-orange" size={24} />
           </div>
-          <p className="text-dimmed text-sm font-medium mb-3 uppercase tracking-widest">Ready to sharpen your thinking?</p>
-          <h2 className="text-3xl font-bold tracking-tight mb-2 px-4 leading-tight">Generate a daily prompt and start training.</h2>
+
+          {sessionError ? (
+            <div className="px-6 animate-in fade-in slide-in-from-top-4">
+              <div className="w-12 h-12 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Mic className="text-red-500" size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-red-500 mb-2">Session Invalid</h3>
+              <p className="text-dimmed text-sm leading-relaxed">{sessionError}</p>
+              <button
+                onClick={() => setSessionError(null)}
+                className="mt-4 text-[10px] uppercase tracking-widest font-bold text-orange hover:opacity-80 transition-opacity"
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-dimmed text-sm font-medium mb-3 uppercase tracking-widest">Ready to sharpen your thinking?</p>
+              <h2 className="text-3xl font-bold tracking-tight mb-2 px-4 leading-tight">Generate a daily prompt and start training.</h2>
+            </>
+          )}
         </Card>
 
         <Button
-          onClick={() => setIsSessionActive(true)}
+          onClick={() => {
+            setSessionError(null);
+            setIsSessionActive(true);
+          }}
           className="w-full py-6 text-xl rounded-[2.5rem] shadow-[0_20px_50px_rgba(255,136,0,0.15)] animate-shimmer bg-gradient-to-r from-orange via-orange/90 to-orange"
         >
           Start Training

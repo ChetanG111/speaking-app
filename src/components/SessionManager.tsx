@@ -36,12 +36,15 @@ interface SessionManagerProps {
     onComplete: (data: any) => void;
 }
 
+const VOICE_THRESHOLD = 15;
+
 export function SessionManager({ preferences, onCancel, onComplete }: SessionManagerProps) {
     const [status, setStatus] = useState<SessionStatus>("generating_topics");
     const [topics, setTopics] = useState<Topic[]>([]);
     const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
     const [countdown, setCountdown] = useState(3);
     const [recordingTime, setRecordingTime] = useState(0);
+    const [hasVoiceDetected, setHasVoiceDetected] = useState(false);
 
     const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
     const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
@@ -80,6 +83,28 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
         if (status === "recording") {
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
+                    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                    const source = audioContext.createMediaStreamSource(stream);
+                    const analyser = audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    source.connect(analyser);
+
+                    const bufferLength = analyser.frequencyBinCount;
+                    const dataArray = new Uint8Array(bufferLength);
+
+                    const checkVolume = () => {
+                        if (status !== "recording") return;
+                        analyser.getByteFrequencyData(dataArray);
+                        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+
+                        // Simple threshold for "actual voice"
+                        if (average > VOICE_THRESHOLD) {
+                            setHasVoiceDetected(true);
+                        }
+                        requestAnimationFrame(checkVolume);
+                    };
+                    checkVolume();
+
                     const recorder = new MediaRecorder(stream);
                     setMediaRecorder(recorder);
                     recorder.ondataavailable = (e) => {
@@ -88,6 +113,11 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
                         }
                     };
                     recorder.start();
+
+                    // Cleanup audio context on stop
+                    recorder.onstop = () => {
+                        audioContext.close();
+                    };
                 })
                 .catch(err => {
                     console.error("Microphone access denied:", err);
@@ -120,12 +150,15 @@ export function SessionManager({ preferences, onCancel, onComplete }: SessionMan
 
     const handleStopRecording = () => {
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
-            mediaRecorder.onstop = () => {
+            const existingOnStop = mediaRecorder.onstop;
+            mediaRecorder.onstop = (e) => {
+                existingOnStop?.call(mediaRecorder, e);
                 const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                 onComplete({
                     topic: selectedTopic,
                     time: recordingTime,
-                    audioBlob
+                    audioBlob,
+                    hasVoice: hasVoiceDetected
                 });
             };
             mediaRecorder.stop();
